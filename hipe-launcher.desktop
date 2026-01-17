@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Hipe Launcher
+Exec=/usr/bin/hipe-launcher
+Icon=hipe
+Type=Application
+Categories=Utility;
+Terminal=false
