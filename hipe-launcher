@@ -437,11 +437,11 @@ class HipeLauncher(Gtk.Window):
         self.flow.set_min_children_per_line(2)
         self.flow.set_column_spacing(16)
         self.flow.set_row_spacing(16)
-        self.flow.set_homogeneous(True)
+        self.flow.set_homogeneous(False)
         self.flow.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.flow.set_halign(Gtk.Align.FILL)
+        self.flow.set_halign(Gtk.Align.START)
 
-        self.flow_outer.pack_start(self.flow, True, True, 0)
+        self.flow_outer.pack_start(self.flow, False, False, 0)
         scroll.add(self.flow_outer)
 
     # ── Uygulama kartları ────────────────────────────────────────────────────
@@ -504,18 +504,20 @@ class HipeLauncher(Gtk.Window):
     def make_card(self, name: str, cmd: str, icon_name: str) -> Gtk.EventBox:
         card = Gtk.EventBox()
         card.get_style_context().add_class("card")
+        # Sabit kart boyutu — arama sonucunda tek kart dev olmasın
+        card.set_size_request(140, 148)
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         vbox.set_halign(Gtk.Align.CENTER)
-        vbox.set_margin_top(0)
+        vbox.set_valign(Gtk.Align.CENTER)
 
-        # İkon
-        icon_widget = self.load_icon(icon_name, size=52)
-        icon_wrap = Gtk.Box()
-        icon_wrap.get_style_context().add_class("icon-wrap")
-        icon_wrap.set_halign(Gtk.Align.CENTER)
-        icon_wrap.pack_start(icon_widget, False, False, 0)
-        vbox.pack_start(icon_wrap, False, False, 0)
+        # İkon — CSS padding için EventBox gerekli (Box'ta çalışmaz)
+        icon_widget = self.load_icon(icon_name, size=48)
+        icon_eb = Gtk.EventBox()
+        icon_eb.get_style_context().add_class("icon-wrap")
+        icon_eb.set_halign(Gtk.Align.CENTER)
+        icon_eb.add(icon_widget)
+        vbox.pack_start(icon_eb, False, False, 0)
 
         # Etiket
         label = Gtk.Label(label=name)
@@ -531,8 +533,6 @@ class HipeLauncher(Gtk.Window):
 
         card.add(vbox)
         card.connect("button-press-event", self.on_card_click, cmd)
-
-        # Hover efekti için enter/leave
         card.add_events(Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
 
         return card
@@ -723,6 +723,7 @@ class HipeLauncher(Gtk.Window):
                 subprocess.Popen(
                     cmd, shell=True,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
             elif speed == "power":
                 subprocess.Popen(
@@ -730,20 +731,30 @@ class HipeLauncher(Gtk.Window):
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     start_new_session=True,
                 )
-            else:  # ultra
+            else:  # ultra — önce systemd-run dene, olmazsa nice ile başlat
                 has_systemd = subprocess.run(
                     ["which", "systemd-run"], capture_output=True
                 ).returncode == 0
 
                 if has_systemd:
+                    # --scope yerine --service: terminal gerektirmez
+                    # --collect: bitiş sonrası unit otomatik temizlenir
+                    ultra_cmd = (
+                        f"systemd-run --user --collect "
+                        f"--property=Nice=-5 "
+                        f"--property=StandardOutput=null "
+                        f"--property=StandardError=null "
+                        f"-- {cmd}"
+                    )
                     subprocess.Popen(
-                        f"systemd-run --user --scope --nice=-5 {cmd}",
-                        shell=True,
+                        ultra_cmd, shell=True,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        start_new_session=True,
                     )
                 else:
+                    # systemd yoksa nice ile öncelik ver
                     subprocess.Popen(
-                        f"nohup {cmd} >/dev/null 2>&1 &", shell=True,
+                        f"nice -n -5 {cmd}", shell=True,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                         start_new_session=True,
                     )
