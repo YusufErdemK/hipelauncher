@@ -55,7 +55,7 @@ hipe-launcher
 
 
 ## Screenshot
-![example](readme/screenshotv0.0.1.png)
+![example](readme/newsceenshot.png)
 
 
 ## How It Works
