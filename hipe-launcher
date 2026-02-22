@@ -195,20 +195,36 @@ headerbar .settings-btn:active {{
     box-shadow: none;
 }}
 
+/* ── FlowBoxChild sıfırlama — GTK otomatik padding ekler ── */
+flowboxchild {{
+    padding: 0;
+    border-radius: 16px;
+    background-color: transparent;
+}}
+flowboxchild:focus {{
+    outline-color: transparent;
+    box-shadow: none;
+    border: none;
+}}
+flowboxchild:selected {{
+    background-color: transparent;
+}}
+
 /* ── Kart ── */
 .card {{
     background-color: {p['card_bg']};
     border: 1px solid {p['border']};
     border-radius: 16px;
-    padding: 20px 16px 18px;
+    padding: 18px 14px 16px;
     box-shadow: 0 2px 6px {p['shadow2']};
 }}
 .card:hover {{
     background-color: {p['card_hover']};
     border-color: {p['border_hover']};
-    box-shadow: 0 4px 16px {p['shadow']};
+    box-shadow: 0 6px 20px {p['shadow']}, 0 2px 8px {p['shadow2']};
 }}
 .card:active {{
+    background-color: {p['surface2']};
     box-shadow: 0 1px 3px {p['shadow2']};
 }}
 
@@ -314,10 +330,16 @@ separator {{
 }}
 
 /* ── Boş durum ── */
+.empty-icon {{
+    font-size: 40px;
+    color: {p['text2']};
+    opacity: 0.4;
+}}
 .empty-label {{
     color: {p['text2']};
     font-size: 14px;
     font-weight: 500;
+    opacity: 0.7;
 }}
 """
 
@@ -402,10 +424,12 @@ class HipeLauncher(Gtk.Window):
         search_outer.set_margin_start(40)
         search_outer.set_margin_end(40)
 
-        search_wrap = Gtk.Box(spacing=0)
+        search_wrap = Gtk.EventBox()
         search_wrap.get_style_context().add_class("search-wrap")
 
-        search_icon = Gtk.Label(label="⌕")
+        search_inner = Gtk.Box(spacing=0)
+
+        search_icon = Gtk.Label(label="🔍")
         search_icon.get_style_context().add_class("search-icon-lbl")
 
         self.search_entry = Gtk.Entry()
@@ -414,8 +438,9 @@ class HipeLauncher(Gtk.Window):
         self.search_entry.connect("changed", self.on_search)
         self.search_entry.set_hexpand(True)
 
-        search_wrap.pack_start(search_icon, False, False, 0)
-        search_wrap.pack_start(self.search_entry, True, True, 0)
+        search_inner.pack_start(search_icon, False, False, 0)
+        search_inner.pack_start(self.search_entry, True, True, 0)
+        search_wrap.add(search_inner)
         search_wrap.set_hexpand(True)
 
         search_outer.pack_start(search_wrap, True, True, 0)
@@ -484,17 +509,26 @@ class HipeLauncher(Gtk.Window):
         for child in self.flow.get_children():
             self.flow.remove(child)
 
-        # Eski boş durum etiketini temizle
+        # Eski boş durum widget'larını temizle
         for child in self.flow_outer.get_children():
             if child != self.flow:
                 self.flow_outer.remove(child)
 
         if not apps:
-            empty = Gtk.Label(label=self.t("no_results"))
-            empty.get_style_context().add_class("empty-label")
-            empty.set_margin_top(80)
-            self.flow_outer.pack_start(empty, False, False, 0)
-            empty.show()
+            empty_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            empty_box.set_halign(Gtk.Align.CENTER)
+            empty_box.set_margin_top(80)
+
+            empty_icon = Gtk.Label(label="🔍")
+            empty_icon.get_style_context().add_class("empty-icon")
+
+            empty_lbl = Gtk.Label(label=self.t("no_results"))
+            empty_lbl.get_style_context().add_class("empty-label")
+
+            empty_box.pack_start(empty_icon, False, False, 0)
+            empty_box.pack_start(empty_lbl, False, False, 0)
+            self.flow_outer.pack_start(empty_box, False, False, 0)
+            empty_box.show_all()
         else:
             for name, cmd, icon in apps:
                 self.flow.add(self.make_card(name, cmd, icon))
@@ -504,14 +538,15 @@ class HipeLauncher(Gtk.Window):
     def make_card(self, name: str, cmd: str, icon_name: str) -> Gtk.EventBox:
         card = Gtk.EventBox()
         card.get_style_context().add_class("card")
-        # Sabit kart boyutu — arama sonucunda tek kart dev olmasın
-        card.set_size_request(140, 148)
+        card.set_size_request(148, 152)
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         vbox.set_halign(Gtk.Align.CENTER)
         vbox.set_valign(Gtk.Align.CENTER)
+        vbox.set_margin_top(4)
+        vbox.set_margin_bottom(4)
 
-        # İkon — CSS padding için EventBox gerekli (Box'ta çalışmaz)
+        # İkon — EventBox CSS padding/border-radius için şart
         icon_widget = self.load_icon(icon_name, size=48)
         icon_eb = Gtk.EventBox()
         icon_eb.get_style_context().add_class("icon-wrap")
@@ -524,7 +559,7 @@ class HipeLauncher(Gtk.Window):
         label.get_style_context().add_class("app-label")
         label.set_line_wrap(True)
         label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        label.set_max_width_chars(12)
+        label.set_max_width_chars(13)
         label.set_lines(2)
         label.set_ellipsize(Pango.EllipsizeMode.END)
         label.set_justify(Gtk.Justification.CENTER)
@@ -580,7 +615,7 @@ class HipeLauncher(Gtk.Window):
         main_box.set_margin_bottom(24)
         main_box.set_margin_start(24)
         main_box.set_margin_end(24)
-        content.pack_start(main_box, True, True, 0)
+        content.pack_start(main_box, False, False, 0)
 
         # Başlık
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -639,8 +674,11 @@ class HipeLauncher(Gtk.Window):
         lbl.set_halign(Gtk.Align.START)
         section.pack_start(lbl, False, False, 0)
 
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        card.get_style_context().add_class("settings-card")
+        # EventBox: CSS border-radius ve border için gerekli
+        card_eb = Gtk.EventBox()
+        card_eb.get_style_context().add_class("settings-card")
+
+        card_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         orient = Gtk.Orientation.HORIZONTAL if horizontal else Gtk.Orientation.VERTICAL
         btn_box = Gtk.Box(orientation=orient, spacing=0)
@@ -663,13 +701,9 @@ class HipeLauncher(Gtk.Window):
             radio.connect("toggled", callback, value)
             btn_box.pack_start(radio, False, False, 0)
 
-            # Ayırıcı (son öğe hariç)
-            if i < len(options) - 1 and not horizontal:
-                sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-                card.pack_start(sep, False, False, 0)
-
-        card.pack_start(btn_box, False, False, 0)
-        section.pack_start(card, False, False, 0)
+        card_inner.pack_start(btn_box, False, False, 0)
+        card_eb.add(card_inner)
+        section.pack_start(card_eb, False, False, 0)
         parent.pack_start(section, False, False, 0)
 
     # ── Ayar değiştirme callback'leri ────────────────────────────────────────
