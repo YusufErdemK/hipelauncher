@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""
+Hipe Launcher — Yeniden Tasarlanmış
+Temiz, tutarlı, modern bir uygulama başlatıcı.
+"""
+
 import gi
 import os
 import subprocess
@@ -6,7 +11,7 @@ import configparser
 import json
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Pango
 
 APP_DIRS = [
     "/usr/share/applications",
@@ -16,748 +21,735 @@ APP_DIRS = [
 SELF_PATH = os.path.abspath(__file__)
 CONFIG_FILE = os.path.expanduser("~/.config/hipe-launcher/settings.json")
 
-# Translations
 TRANSLATIONS = {
     "tr": {
-        "title": "Hipe Başlatıcı",
+        "title": "Hipe",
         "search": "Uygulama ara...",
         "settings": "Ayarlar",
         "theme": "Tema",
         "light": "Açık",
         "dark": "Koyu",
         "language": "Dil",
-        "launch_speed": "Başlatma Hızı",
-        "normal": "Normal Hız (Standart)",
-        "power": "Güç (Arka Planda Çalıştır)",
-        "ultra": "Ultra Hız (Öncelikli Başlat)",
-        "close": "Kapat",
-        "apps_count": "uygulama"
+        "launch_speed": "Başlatma Modu",
+        "normal": "Normal",
+        "normal_desc": "Standart başlatma",
+        "power": "Güç",
+        "power_desc": "Arka planda çalıştır",
+        "ultra": "Ultra",
+        "ultra_desc": "Öncelikli başlat",
+        "close": "Tamam",
+        "apps_count": "uygulama",
+        "no_results": "Sonuç bulunamadı",
     },
     "en": {
-        "title": "Hipe Launcher",
+        "title": "Hipe",
         "search": "Search applications...",
         "settings": "Settings",
         "theme": "Theme",
         "light": "Light",
         "dark": "Dark",
         "language": "Language",
-        "launch_speed": "Launch Speed",
-        "normal": "Normal Speed (Standard)",
-        "power": "Power (Background Launch)",
-        "ultra": "Ultra Speed (Priority Launch)",
-        "close": "Close",
-        "apps_count": "applications"
-    }
+        "launch_speed": "Launch Mode",
+        "normal": "Normal",
+        "normal_desc": "Standard launch",
+        "power": "Power",
+        "power_desc": "Background launch",
+        "ultra": "Ultra",
+        "ultra_desc": "Priority launch",
+        "close": "Done",
+        "apps_count": "apps",
+        "no_results": "No results found",
+    },
 }
+
+# ── Renk paletleri ──────────────────────────────────────────────────────────
+
+LIGHT = {
+    "bg":           "#F2F4F8",
+    "bg2":          "#E8EBF2",
+    "surface":      "#FFFFFF",
+    "surface2":     "#F7F8FC",
+    "border":       "rgba(0,0,0,0.07)",
+    "border_hover": "rgba(99,102,241,0.35)",
+    "header_bg":    "#FFFFFF",
+    "header_border":"rgba(0,0,0,0.08)",
+    "accent":       "#6366F1",          # indigo
+    "accent2":      "#818CF8",
+    "text":         "#111827",
+    "text2":        "#6B7280",
+    "search_bg":    "#FFFFFF",
+    "card_bg":      "#FFFFFF",
+    "card_hover":   "#FAFBFF",
+    "shadow":       "rgba(99,102,241,0.10)",
+    "shadow2":      "rgba(0,0,0,0.06)",
+    "icon_bg":      "rgba(99,102,241,0.08)",
+    "radio_active": "#6366F1",
+    "sep":          "rgba(0,0,0,0.08)",
+    "dialog_bg":    "#FFFFFF",
+}
+
+DARK = {
+    "bg":           "#0E0F14",
+    "bg2":          "#13151C",
+    "surface":      "#1A1D27",
+    "surface2":     "#20232F",
+    "border":       "rgba(255,255,255,0.07)",
+    "border_hover": "rgba(129,140,248,0.40)",
+    "header_bg":    "#13151C",
+    "header_border":"rgba(255,255,255,0.06)",
+    "accent":       "#818CF8",
+    "accent2":      "#6366F1",
+    "text":         "#F1F5F9",
+    "text2":        "#94A3B8",
+    "search_bg":    "#1A1D27",
+    "card_bg":      "#1A1D27",
+    "card_hover":   "#20232F",
+    "shadow":       "rgba(0,0,0,0.40)",
+    "shadow2":      "rgba(0,0,0,0.30)",
+    "icon_bg":      "rgba(129,140,248,0.10)",
+    "radio_active": "#818CF8",
+    "sep":          "rgba(255,255,255,0.07)",
+    "dialog_bg":    "#1A1D27",
+}
+
+
+def build_css(p: dict) -> str:
+    """p = renk sözlüğü (LIGHT veya DARK)
+    
+    Yalnızca GTK 3 CSS'de desteklenen özellikler kullanılır:
+    - text-transform: DESTEKLENMIYOR → Python'da .upper() ile yapılır
+    - caret-color: DESTEKLENMIYOR → kaldırıldı
+    - focus-within: DESTEKLENMIYOR → kaldırıldı
+    - outline: DESTEKLENMIYOR → kaldırıldı
+    - letter-spacing: px değil 'em' bazlı değer gerekir → kaldırıldı
+    """
+    return f"""
+/* ── Temel pencere ── */
+window {{
+    background-color: {p['bg']};
+}}
+
+/* ── Header ── */
+headerbar {{
+    background-color: {p['header_bg']};
+    border-bottom: 1px solid {p['header_border']};
+    box-shadow: 0 1px 0 {p['header_border']};
+    min-height: 56px;
+    padding: 0 16px;
+}}
+headerbar .title {{
+    color: {p['text']};
+    font-size: 15px;
+    font-weight: 700;
+}}
+headerbar .subtitle {{
+    color: {p['text2']};
+    font-size: 11px;
+    font-weight: 500;
+}}
+headerbar .settings-btn {{
+    background-color: transparent;
+    border: 1px solid {p['border']};
+    border-radius: 8px;
+    padding: 6px 8px;
+    min-height: 32px;
+    min-width: 32px;
+    color: {p['text2']};
+}}
+headerbar .settings-btn:hover {{
+    background-color: {p['icon_bg']};
+    border-color: {p['border_hover']};
+    color: {p['accent']};
+}}
+headerbar .settings-btn:active {{
+    background-color: {p['surface2']};
+}}
+
+/* ── Arama kutusu ── */
+.search-wrap {{
+    background-color: {p['search_bg']};
+    border: 1px solid {p['border']};
+    border-radius: 14px;
+    box-shadow: 0 2px 8px {p['shadow2']};
+}}
+.search-wrap:focus {{
+    border-color: {p['accent']};
+}}
+.search-icon-lbl {{
+    color: {p['text2']};
+    font-size: 17px;
+    padding: 0 6px 0 16px;
+}}
+.search-entry {{
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: {p['text']};
+    font-size: 14px;
+    font-weight: 400;
+    padding: 13px 16px 13px 4px;
+}}
+.search-entry:focus {{
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}}
+
+/* ── Kart ── */
+.card {{
+    background-color: {p['card_bg']};
+    border: 1px solid {p['border']};
+    border-radius: 16px;
+    padding: 20px 16px 18px;
+    box-shadow: 0 2px 6px {p['shadow2']};
+}}
+.card:hover {{
+    background-color: {p['card_hover']};
+    border-color: {p['border_hover']};
+    box-shadow: 0 4px 16px {p['shadow']};
+}}
+.card:active {{
+    box-shadow: 0 1px 3px {p['shadow2']};
+}}
+
+/* ── İkon arka planı ── */
+.icon-wrap {{
+    background-color: {p['icon_bg']};
+    border-radius: 14px;
+    padding: 10px;
+}}
+
+/* ── Uygulama etiketi ── */
+.app-label {{
+    color: {p['text']};
+    font-size: 12px;
+    font-weight: 600;
+}}
+
+/* ── Kaydırma ── */
+scrolledwindow {{
+    background-color: transparent;
+}}
+viewport {{
+    background-color: transparent;
+}}
+scrollbar {{
+    background-color: transparent;
+    border: none;
+    min-width: 6px;
+}}
+scrollbar slider {{
+    background-color: {p['border']};
+    border-radius: 3px;
+    min-width: 6px;
+    min-height: 40px;
+}}
+scrollbar slider:hover {{
+    background-color: {p['text2']};
+}}
+
+/* ── Ayarlar dialog ── */
+.settings-dialog {{
+    background-color: {p['dialog_bg']};
+}}
+.settings-header {{
+    color: {p['text']};
+    font-size: 16px;
+    font-weight: 700;
+}}
+.section-title {{
+    color: {p['text2']};
+    font-size: 10px;
+    font-weight: 700;
+}}
+.settings-card {{
+    background-color: {p['surface']};
+    border: 1px solid {p['border']};
+    border-radius: 12px;
+    padding: 4px 0;
+}}
+radiobutton {{
+    color: {p['text']};
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 14px;
+    border-radius: 8px;
+}}
+radiobutton:hover {{
+    background-color: {p['icon_bg']};
+}}
+radiobutton radio {{
+    background-color: {p['surface2']};
+    border-color: {p['border']};
+    min-width: 16px;
+    min-height: 16px;
+}}
+radiobutton:checked radio {{
+    background-color: {p['accent']};
+    border-color: {p['accent']};
+}}
+separator {{
+    background-color: {p['sep']};
+    min-height: 1px;
+    margin: 0 14px;
+}}
+
+/* ── Birincil düğme ── */
+.primary-btn {{
+    background-color: {p['accent']};
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 24px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px {p['shadow']};
+}}
+.primary-btn:hover {{
+    background-color: {p['accent2']};
+    box-shadow: 0 4px 12px {p['shadow']};
+}}
+.primary-btn:active {{
+    box-shadow: 0 1px 4px {p['shadow']};
+}}
+
+/* ── Boş durum ── */
+.empty-label {{
+    color: {p['text2']};
+    font-size: 14px;
+    font-weight: 500;
+}}
+"""
 
 
 class HipeLauncher(Gtk.Window):
     def __init__(self):
         super().__init__(title="Hipe Launcher")
-        self.set_default_size(1400, 900)
+        self.set_default_size(1280, 820)
         self.set_position(Gtk.WindowPosition.CENTER)
-        
-        # Load settings
-        self.load_settings()
-        
-        self.build_ui()
-        self.apply_css()
-        
-        self.apps = self.load_apps()
-        self.render_apps(self.apps)
 
-    # ---------------- SETTINGS ----------------
-
-    def load_settings(self):
-        """Load settings from config file"""
-        default_settings = {
-            "theme": "light",
-            "language": "tr",
-            "launch_speed": "normal"
-        }
-        
-        try:
-            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-            if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, 'r') as f:
-                    self.settings = {**default_settings, **json.load(f)}
-            else:
-                self.settings = default_settings
-                self.save_settings()
-        except Exception:
-            self.settings = default_settings
-
-    def save_settings(self):
-        """Save settings to config file"""
-        try:
-            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(self.settings, f, indent=2)
-        except Exception as e:
-            print(f"Error saving settings: {e}")
-
-    def get_text(self, key):
-        """Get translated text"""
-        return TRANSLATIONS[self.settings["language"]].get(key, key)
-
-    # ---------------- UI ----------------
-
-    def build_ui(self):
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.add(root)
-
-        # Header bar
-        header = Gtk.HeaderBar(show_close_button=True)
-        header.set_title(self.get_text("title"))
-        header.set_subtitle(f"{len(self.load_apps())} {self.get_text('apps_count')}")
-        
-        # Settings button
-        settings_btn = Gtk.Button()
-        settings_icon = Gtk.Image.new_from_icon_name("preferences-system", Gtk.IconSize.BUTTON)
-        settings_btn.set_image(settings_icon)
-        settings_btn.set_tooltip_text(self.get_text("settings"))
-        settings_btn.connect("clicked", self.show_settings)
-        settings_btn.get_style_context().add_class("settings-btn")
-        header.pack_end(settings_btn)
-        
-        self.set_titlebar(header)
-
-        # Search container
-        search_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        search_container.set_margin_top(32)
-        search_container.set_margin_bottom(24)
-        search_container.set_margin_start(48)
-        search_container.set_margin_end(48)
-
-        search_box = Gtk.Box(spacing=14)
-        search_box.get_style_context().add_class("search-box")
-
-        search_icon = Gtk.Label(label="🔍")
-        search_icon.get_style_context().add_class("search-icon")
-
-        self.search = Gtk.Entry()
-        self.search.set_placeholder_text(self.get_text("search"))
-        self.search.get_style_context().add_class("search-entry")
-        self.search.connect("changed", self.on_search)
-
-        search_box.pack_start(search_icon, False, False, 0)
-        search_box.pack_start(self.search, True, True, 0)
-        
-        search_container.pack_start(search_box, False, False, 0)
-        root.pack_start(search_container, False, False, 0)
-
-        # Apps container
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.get_style_context().add_class("apps-scroll")
-        root.pack_start(scroll, True, True, 0)
-
-        # Flow box with padding
-        flow_wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        flow_wrapper.set_margin_start(40)
-        flow_wrapper.set_margin_end(40)
-        flow_wrapper.set_margin_top(12)
-        flow_wrapper.set_margin_bottom(32)
-
-        self.flow = Gtk.FlowBox()
-        self.flow.set_max_children_per_line(6)
-        self.flow.set_column_spacing(28)
-        self.flow.set_row_spacing(28)
-        self.flow.set_homogeneous(False)
-        self.flow.set_selection_mode(Gtk.SelectionMode.NONE)
-
-        flow_wrapper.pack_start(self.flow, True, True, 0)
-        scroll.add(flow_wrapper)
-
-    # ---------------- SETTINGS DIALOG ----------------
-
-    def show_settings(self, button):
-        """Show settings dialog"""
-        dialog = Gtk.Dialog()
-        dialog.set_title(self.get_text("settings"))
-        dialog.set_transient_for(self)
-        dialog.set_modal(True)
-        dialog.set_default_size(450, 400)
-        dialog.get_style_context().add_class("settings-dialog")
-        
-        box = dialog.get_content_area()
-        box.set_spacing(24)
-        box.set_margin_top(24)
-        box.set_margin_bottom(24)
-        box.set_margin_start(32)
-        box.set_margin_end(32)
-
-        # Theme setting
-        theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        theme_label = Gtk.Label(label=self.get_text("theme"))
-        theme_label.set_halign(Gtk.Align.START)
-        theme_label.get_style_context().add_class("settings-label")
-        theme_box.pack_start(theme_label, False, False, 0)
-
-        theme_buttons = Gtk.Box(spacing=12)
-        light_btn = Gtk.RadioButton.new_with_label_from_widget(None, self.get_text("light"))
-        dark_btn = Gtk.RadioButton.new_with_label_from_widget(light_btn, self.get_text("dark"))
-        
-        if self.settings["theme"] == "dark":
-            dark_btn.set_active(True)
-        
-        light_btn.connect("toggled", self.on_theme_changed, "light")
-        dark_btn.connect("toggled", self.on_theme_changed, "dark")
-        
-        theme_buttons.pack_start(light_btn, False, False, 0)
-        theme_buttons.pack_start(dark_btn, False, False, 0)
-        theme_box.pack_start(theme_buttons, False, False, 0)
-        box.pack_start(theme_box, False, False, 0)
-
-        # Separator
-        sep1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        box.pack_start(sep1, False, False, 0)
-
-        # Language setting
-        lang_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        lang_label = Gtk.Label(label=self.get_text("language"))
-        lang_label.set_halign(Gtk.Align.START)
-        lang_label.get_style_context().add_class("settings-label")
-        lang_box.pack_start(lang_label, False, False, 0)
-
-        lang_buttons = Gtk.Box(spacing=12)
-        tr_btn = Gtk.RadioButton.new_with_label_from_widget(None, "Türkçe")
-        en_btn = Gtk.RadioButton.new_with_label_from_widget(tr_btn, "English")
-        
-        if self.settings["language"] == "en":
-            en_btn.set_active(True)
-        
-        tr_btn.connect("toggled", self.on_language_changed, "tr")
-        en_btn.connect("toggled", self.on_language_changed, "en")
-        
-        lang_buttons.pack_start(tr_btn, False, False, 0)
-        lang_buttons.pack_start(en_btn, False, False, 0)
-        lang_box.pack_start(lang_buttons, False, False, 0)
-        box.pack_start(lang_box, False, False, 0)
-
-        # Separator
-        sep2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        box.pack_start(sep2, False, False, 0)
-
-        # Launch speed setting
-        speed_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        speed_label = Gtk.Label(label=self.get_text("launch_speed"))
-        speed_label.set_halign(Gtk.Align.START)
-        speed_label.get_style_context().add_class("settings-label")
-        speed_box.pack_start(speed_label, False, False, 0)
-
-        speed_buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        normal_btn = Gtk.RadioButton.new_with_label_from_widget(None, self.get_text("normal"))
-        power_btn = Gtk.RadioButton.new_with_label_from_widget(normal_btn, self.get_text("power"))
-        ultra_btn = Gtk.RadioButton.new_with_label_from_widget(normal_btn, self.get_text("ultra"))
-        
-        if self.settings["launch_speed"] == "power":
-            power_btn.set_active(True)
-        elif self.settings["launch_speed"] == "ultra":
-            ultra_btn.set_active(True)
-        
-        normal_btn.connect("toggled", self.on_speed_changed, "normal")
-        power_btn.connect("toggled", self.on_speed_changed, "power")
-        ultra_btn.connect("toggled", self.on_speed_changed, "ultra")
-        
-        speed_buttons.pack_start(normal_btn, False, False, 0)
-        speed_buttons.pack_start(power_btn, False, False, 0)
-        speed_buttons.pack_start(ultra_btn, False, False, 0)
-        speed_box.pack_start(speed_buttons, False, False, 0)
-        box.pack_start(speed_box, False, False, 0)
-
-        # Close button
-        close_btn = Gtk.Button(label=self.get_text("close"))
-        close_btn.get_style_context().add_class("close-btn")
-        close_btn.connect("clicked", lambda w: dialog.destroy())
-        box.pack_end(close_btn, False, False, 0)
-
-        dialog.show_all()
-
-    def on_theme_changed(self, button, theme):
-        if button.get_active():
-            self.settings["theme"] = theme
-            self.save_settings()
-            self.apply_css()
-
-    def on_language_changed(self, button, lang):
-        if button.get_active():
-            self.settings["language"] = lang
-            self.save_settings()
-            # Reload UI with new language
-            GLib.timeout_add(100, self.reload_ui)
-
-    def on_speed_changed(self, button, speed):
-        if button.get_active():
-            self.settings["launch_speed"] = speed
-            self.save_settings()
-
-    def reload_ui(self):
-        """Reload UI with new language"""
-        for child in self.get_children():
-            self.remove(child)
-        self.build_ui()
-        self.render_apps(self.apps)
-        self.show_all()
-        return False
-
-    # ---------------- CSS ----------------
-
-    def apply_css(self):
-        theme = self.settings["theme"]
-        
-        if theme == "dark":
-            css = """
-            window {
-                background: linear-gradient(to bottom, #1a1d23 0%, #0f1115 100%);
-            }
-
-            headerbar {
-                background: linear-gradient(to bottom, #2d3139 0%, #25282f 100%);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-                color: #ffffff;
-                min-height: 52px;
-            }
-
-            headerbar > label {
-                color: #ffffff;
-                font-weight: 600;
-                font-size: 15px;
-            }
-
-            .settings-btn {
-                background: transparent;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                padding: 8px;
-            }
-
-            .settings-btn:hover {
-                background: rgba(255, 255, 255, 0.08);
-                border-color: rgba(255, 255, 255, 0.2);
-            }
-
-            .search-box {
-                background-color: #2d3139;
-                border-radius: 18px;
-                padding: 14px 20px;
-                box-shadow: 
-                    0 4px 12px rgba(0, 0, 0, 0.3),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-
-            .search-icon {
-                color: #8e8e93;
-                font-size: 19px;
-            }
-
-            .search-entry {
-                background: transparent;
-                border: none;
-                box-shadow: none;
-                color: #ffffff;
-                font-size: 15px;
-                caret-color: #0a84ff;
-            }
-
-            .search-entry:focus {
-                background: transparent;
-                border: none;
-                box-shadow: none;
-            }
-
-            .apps-scroll {
-                background: transparent;
-            }
-
-            .card {
-                background: linear-gradient(135deg, #2d3139 0%, #25282f 100%);
-                border-radius: 22px;
-                padding: 24px 20px;
-                box-shadow: 
-                    0 6px 16px rgba(0, 0, 0, 0.4),
-                    0 2px 8px rgba(0, 0, 0, 0.3),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-                min-width: 140px;
-                min-height: 140px;
-            }
-
-            .card:hover {
-                background: linear-gradient(135deg, #363a44 0%, #2d3139 100%);
-                box-shadow: 
-                    0 10px 28px rgba(0, 0, 0, 0.5),
-                    0 4px 16px rgba(0, 0, 0, 0.4),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-                border-color: rgba(255, 255, 255, 0.18);
-            }
-
-            .card:active {
-                box-shadow: 
-                    0 2px 10px rgba(0, 0, 0, 0.4),
-                    0 1px 6px rgba(0, 0, 0, 0.3);
-            }
-
-            .app-label {
-                color: #ffffff;
-                font-weight: 500;
-                font-size: 13px;
-                letter-spacing: -0.01em;
-            }
-
-            .app-icon {
-                margin-bottom: 8px;
-            }
-
-            .settings-dialog {
-                background: #25282f;
-            }
-
-            .settings-label {
-                color: #ffffff;
-                font-weight: 600;
-                font-size: 14px;
-            }
-
-            radiobutton {
-                color: #ffffff;
-            }
-
-            radiobutton:checked {
-                color: #0a84ff;
-            }
-
-            separator {
-                background: rgba(255, 255, 255, 0.1);
-                min-height: 1px;
-            }
-
-            .close-btn {
-                background: linear-gradient(to bottom, #0a84ff 0%, #0070f3 100%);
-                color: white;
-                border: none;
-                border-radius: 10px;
-                padding: 10px 24px;
-                font-weight: 600;
-            }
-
-            .close-btn:hover {
-                background: linear-gradient(to bottom, #1a94ff 0%, #1080ff 100%);
-            }
-            """
-        else:
-            css = """
-            window {
-                background: linear-gradient(to bottom, #f8f9fb 0%, #eef1f5 100%);
-            }
-
-            headerbar {
-                background: linear-gradient(to bottom, #667eea 0%, #5a67d8 100%);
-                border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-                box-shadow: 0 2px 12px rgba(102, 126, 234, 0.3);
-                color: white;
-                min-height: 52px;
-            }
-
-            headerbar > label {
-                color: #ffffff;
-                font-weight: 600;
-                font-size: 15px;
-                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-            }
-
-            .settings-btn {
-                background: rgba(255, 255, 255, 0.15);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                padding: 8px;
-            }
-
-            .settings-btn:hover {
-                background: rgba(255, 255, 255, 0.25);
-                border-color: rgba(255, 255, 255, 0.35);
-            }
-
-            .search-box {
-                background-color: #ffffff;
-                border-radius: 18px;
-                padding: 14px 20px;
-                box-shadow: 
-                    0 4px 16px rgba(0, 0, 0, 0.06),
-                    0 2px 8px rgba(0, 0, 0, 0.04),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-                border: 1px solid rgba(0, 0, 0, 0.06);
-            }
-
-            .search-icon {
-                color: #86868b;
-                font-size: 19px;
-            }
-
-            .search-entry {
-                background: transparent;
-                border: none;
-                box-shadow: none;
-                color: #1d1d1f;
-                font-size: 15px;
-                caret-color: #667eea;
-            }
-
-            .search-entry:focus {
-                background: transparent;
-                border: none;
-                box-shadow: none;
-            }
-
-            .apps-scroll {
-                background: transparent;
-            }
-
-            .card {
-                background: linear-gradient(135deg, #ffffff 0%, #fefefe 100%);
-                border-radius: 22px;
-                padding: 24px 20px;
-                box-shadow: 
-                    0 6px 16px rgba(0, 0, 0, 0.08),
-                    0 2px 8px rgba(0, 0, 0, 0.04),
-                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-                border: 1px solid rgba(0, 0, 0, 0.08);
-                transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-                min-width: 140px;
-                min-height: 140px;
-            }
-
-            .card:hover {
-                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-                box-shadow: 
-                    0 10px 28px rgba(102, 126, 234, 0.15),
-                    0 4px 16px rgba(0, 0, 0, 0.08),
-                    inset 0 1px 0 rgba(255, 255, 255, 1);
-                border-color: rgba(102, 126, 234, 0.25);
-            }
-
-            .card:active {
-                box-shadow: 
-                    0 2px 10px rgba(0, 0, 0, 0.1),
-                    0 1px 6px rgba(0, 0, 0, 0.06);
-            }
-
-            .app-label {
-                color: #1d1d1f;
-                font-weight: 500;
-                font-size: 13px;
-                letter-spacing: -0.01em;
-            }
-
-            .app-icon {
-                margin-bottom: 8px;
-            }
-
-            .settings-dialog {
-                background: #ffffff;
-            }
-
-            .settings-label {
-                color: #1d1d1f;
-                font-weight: 600;
-                font-size: 14px;
-            }
-
-            radiobutton {
-                color: #1d1d1f;
-            }
-
-            radiobutton:checked {
-                color: #667eea;
-            }
-
-            separator {
-                background: rgba(0, 0, 0, 0.1);
-                min-height: 1px;
-            }
-
-            .close-btn {
-                background: linear-gradient(to bottom, #667eea 0%, #5a67d8 100%);
-                color: white;
-                border: none;
-                border-radius: 10px;
-                padding: 10px 24px;
-                font-weight: 600;
-            }
-
-            .close-btn:hover {
-                background: linear-gradient(to bottom, #7688ee 0%, #6a77dc 100%);
-            }
-            """
-
-        provider = Gtk.CssProvider()
-        provider.load_from_data(css.encode())
-
+        self._css_provider = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
-            provider,
+            self._css_provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
-    # ---------------- APPS ----------------
+        self.load_settings()
+        self.apps = self.load_apps()
+
+        self.build_ui()
+        self.apply_css()
+        self.render_apps(self.apps)
+
+    # ── Ayarlar ──────────────────────────────────────────────────────────────
+
+    def load_settings(self):
+        defaults = {"theme": "light", "language": "en", "launch_speed": "normal"}
+        try:
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE) as f:
+                    self.settings = {**defaults, **json.load(f)}
+            else:
+                self.settings = defaults
+                self.save_settings()
+        except Exception:
+            self.settings = defaults
+
+    def save_settings(self):
+        try:
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(self.settings, f, indent=2)
+        except Exception as e:
+            print(f"Settings save error: {e}")
+
+    def t(self, key):
+        return TRANSLATIONS[self.settings["language"]].get(key, key)
+
+    # ── CSS ──────────────────────────────────────────────────────────────────
+
+    def apply_css(self):
+        palette = DARK if self.settings["theme"] == "dark" else LIGHT
+        self._css_provider.load_from_data(build_css(palette).encode())
+
+    # ── Arayüz ───────────────────────────────────────────────────────────────
+
+    def build_ui(self):
+        # ── Header bar ──
+        self.header = Gtk.HeaderBar(show_close_button=True)
+        self.header.set_title(self.t("title"))
+        self.header.set_subtitle(f"{len(self.apps)} {self.t('apps_count')}")
+
+        settings_btn = Gtk.Button()
+        icon_img = Gtk.Image.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.MENU)
+        settings_btn.set_image(icon_img)
+        settings_btn.set_tooltip_text(self.t("settings"))
+        settings_btn.get_style_context().add_class("settings-btn")
+        settings_btn.connect("clicked", self.show_settings)
+        self.header.pack_end(settings_btn)
+        self.set_titlebar(self.header)
+
+        # ── Ana container ──
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(root)
+
+        # ── Arama ──
+        search_outer = Gtk.Box()
+        search_outer.set_margin_top(28)
+        search_outer.set_margin_bottom(20)
+        search_outer.set_margin_start(40)
+        search_outer.set_margin_end(40)
+
+        search_wrap = Gtk.Box(spacing=0)
+        search_wrap.get_style_context().add_class("search-wrap")
+
+        search_icon = Gtk.Label(label="⌕")
+        search_icon.get_style_context().add_class("search-icon-lbl")
+
+        self.search_entry = Gtk.Entry()
+        self.search_entry.set_placeholder_text(self.t("search"))
+        self.search_entry.get_style_context().add_class("search-entry")
+        self.search_entry.connect("changed", self.on_search)
+        self.search_entry.set_hexpand(True)
+
+        search_wrap.pack_start(search_icon, False, False, 0)
+        search_wrap.pack_start(self.search_entry, True, True, 0)
+        search_wrap.set_hexpand(True)
+
+        search_outer.pack_start(search_wrap, True, True, 0)
+        root.pack_start(search_outer, False, False, 0)
+
+        # ── Kaydırmalı alan ──
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        root.pack_start(scroll, True, True, 0)
+
+        self.flow_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.flow_outer.set_margin_start(36)
+        self.flow_outer.set_margin_end(36)
+        self.flow_outer.set_margin_top(4)
+        self.flow_outer.set_margin_bottom(36)
+
+        self.flow = Gtk.FlowBox()
+        self.flow.set_max_children_per_line(8)
+        self.flow.set_min_children_per_line(2)
+        self.flow.set_column_spacing(16)
+        self.flow.set_row_spacing(16)
+        self.flow.set_homogeneous(True)
+        self.flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.flow.set_halign(Gtk.Align.FILL)
+
+        self.flow_outer.pack_start(self.flow, True, True, 0)
+        scroll.add(self.flow_outer)
+
+    # ── Uygulama kartları ────────────────────────────────────────────────────
 
     def load_apps(self):
         apps = []
-
         for base in APP_DIRS:
             if not os.path.isdir(base):
                 continue
-
-            for file in os.listdir(base):
-                if not file.endswith(".desktop"):
+            for fn in os.listdir(base):
+                if not fn.endswith(".desktop"):
                     continue
-
-                path = os.path.join(base, file)
+                path = os.path.join(base, fn)
                 cfg = configparser.ConfigParser(interpolation=None)
-
                 try:
                     cfg.read(path)
                     entry = cfg["Desktop Entry"]
-
                     if entry.get("NoDisplay", "false").lower() == "true":
                         continue
-
-                    name = entry.get("Name")
+                    name = entry.get("Name", "").strip()
                     exec_cmd = entry.get("Exec", "").split("%")[0].strip()
-                    icon = entry.get("Icon")
-
+                    icon = entry.get("Icon", "").strip()
+                    if not name or not exec_cmd:
+                        continue
                     if SELF_PATH in exec_cmd:
                         continue
-
                     apps.append((name, exec_cmd, icon))
-
                 except Exception:
                     continue
-
-        return sorted(set(apps), key=lambda x: x[0].lower())
+        # Tekrarları kaldır, ada göre sırala
+        seen = set()
+        unique = []
+        for a in sorted(apps, key=lambda x: x[0].lower()):
+            if a[0].lower() not in seen:
+                seen.add(a[0].lower())
+                unique.append(a)
+        return unique
 
     def render_apps(self, apps):
         for child in self.flow.get_children():
             self.flow.remove(child)
 
-        for name, cmd, icon in apps:
-            self.flow.add(self.create_card(name, cmd, icon))
+        # Eski boş durum etiketini temizle
+        for child in self.flow_outer.get_children():
+            if child != self.flow:
+                self.flow_outer.remove(child)
+
+        if not apps:
+            empty = Gtk.Label(label=self.t("no_results"))
+            empty.get_style_context().add_class("empty-label")
+            empty.set_margin_top(80)
+            self.flow_outer.pack_start(empty, False, False, 0)
+            empty.show()
+        else:
+            for name, cmd, icon in apps:
+                self.flow.add(self.make_card(name, cmd, icon))
 
         self.flow.show_all()
 
-    def create_card(self, name, cmd, icon_name):
+    def make_card(self, name: str, cmd: str, icon_name: str) -> Gtk.EventBox:
         card = Gtk.EventBox()
         card.get_style_context().add_class("card")
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.set_halign(Gtk.Align.CENTER)
-        box.set_valign(Gtk.Align.CENTER)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        vbox.set_halign(Gtk.Align.CENTER)
+        vbox.set_margin_top(0)
 
-        icon = self.load_icon(icon_name)
-        icon.get_style_context().add_class("app-icon")
-        box.pack_start(icon, False, False, 0)
+        # İkon
+        icon_widget = self.load_icon(icon_name, size=52)
+        icon_wrap = Gtk.Box()
+        icon_wrap.get_style_context().add_class("icon-wrap")
+        icon_wrap.set_halign(Gtk.Align.CENTER)
+        icon_wrap.pack_start(icon_widget, False, False, 0)
+        vbox.pack_start(icon_wrap, False, False, 0)
 
+        # Etiket
         label = Gtk.Label(label=name)
-        label.set_line_wrap(True)
-        label.set_max_width_chars(14)
-        label.set_justify(Gtk.Justification.CENTER)
-        label.set_ellipsize(3)
         label.get_style_context().add_class("app-label")
+        label.set_line_wrap(True)
+        label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        label.set_max_width_chars(12)
+        label.set_lines(2)
+        label.set_ellipsize(Pango.EllipsizeMode.END)
+        label.set_justify(Gtk.Justification.CENTER)
+        label.set_halign(Gtk.Align.CENTER)
+        vbox.pack_start(label, False, False, 0)
 
-        box.pack_start(label, False, False, 0)
+        card.add(vbox)
+        card.connect("button-press-event", self.on_card_click, cmd)
 
-        card.add(box)
-        card.connect("button-press-event", lambda *_: self.launch(cmd))
+        # Hover efekti için enter/leave
+        card.add_events(Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
+
         return card
 
-    def load_icon(self, name):
+    def on_card_click(self, widget, event, cmd):
+        if event.button == 1:  # Sol tık
+            self.launch(cmd)
+
+    def load_icon(self, name: str, size: int = 52) -> Gtk.Image:
         try:
             if name and os.path.isfile(name):
-                pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(name, 76, 76, True)
+                pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(name, size, size, True)
                 return Gtk.Image.new_from_pixbuf(pix)
-
-            img = Gtk.Image.new_from_icon_name(name, Gtk.IconSize.DIALOG)
-            img.set_pixel_size(76)
-            return img
-
+            if name:
+                theme = Gtk.IconTheme.get_default()
+                if theme.has_icon(name):
+                    img = Gtk.Image.new_from_icon_name(name, Gtk.IconSize.DIALOG)
+                    img.set_pixel_size(size)
+                    return img
         except Exception:
-            fallback = Gtk.Image.new_from_icon_name(
-                "application-x-executable", Gtk.IconSize.DIALOG
-            )
-            fallback.set_pixel_size(76)
-            return fallback
+            pass
+        fallback = Gtk.Image.new_from_icon_name("application-x-executable", Gtk.IconSize.DIALOG)
+        fallback.set_pixel_size(size)
+        return fallback
 
-    # ---------------- ACTIONS ----------------
+    # ── Ayarlar dialog ───────────────────────────────────────────────────────
 
-    def launch(self, cmd):
-        """Launch application with optimized settings"""
-        speed = self.settings["launch_speed"]
-        
-        try:
-            if speed == "normal":
-                # Normal launch - simple and reliable
-                subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                
-            elif speed == "power":
-                # Power mode - detach completely and run in background
-                # Uses nohup to prevent hangups and runs in new process group
-                power_cmd = f"nohup {cmd} >/dev/null 2>&1 &"
-                subprocess.Popen(
-                    power_cmd,
-                    shell=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True
-                )
-                
-            else:  # ultra
-                # Ultra mode - uses systemd-run for complete isolation and priority
-                # This works without root and gives better resource management
-                ultra_cmd = f"systemd-run --user --scope --nice=-5 {cmd}"
-                result = subprocess.run(
-                    ["which", "systemd-run"],
-                    capture_output=True
-                )
-                
-                if result.returncode == 0:
-                    # systemd-run available - best option
-                    subprocess.Popen(
-                        ultra_cmd,
-                        shell=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                else:
-                    # Fallback to detached background launch
-                    fallback_cmd = f"nohup {cmd} >/dev/null 2>&1 &"
-                    subprocess.Popen(
-                        fallback_cmd,
-                        shell=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        start_new_session=True
-                    )
-            
-            # Close launcher after successful launch
-            self.destroy()
-                
-        except Exception as e:
-            print(f"Error launching app: {e}")
+    def show_settings(self, _btn):
+        dlg = Gtk.Dialog()
+        dlg.set_title(self.t("settings"))
+        dlg.set_transient_for(self)
+        dlg.set_modal(True)
+        dlg.set_default_size(400, 0)
+        dlg.set_resizable(False)
+        dlg.get_style_context().add_class("settings-dialog")
+
+        # Varsayılan alt düğme çubuğunu gizle
+        dlg.get_action_area().hide()
+
+        content = dlg.get_content_area()
+        content.set_spacing(0)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        main_box.set_margin_top(24)
+        main_box.set_margin_bottom(24)
+        main_box.set_margin_start(24)
+        main_box.set_margin_end(24)
+        content.pack_start(main_box, True, True, 0)
+
+        # Başlık
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        header_lbl = Gtk.Label(label=self.t("settings"))
+        header_lbl.get_style_context().add_class("settings-header")
+        header_lbl.set_halign(Gtk.Align.START)
+        header_box.pack_start(header_lbl, True, True, 0)
+        main_box.pack_start(header_box, False, False, 0)
+
+        # ── Tema ──
+        self._add_section(main_box, self.t("theme"),
+            [
+                (self.t("light"), "light"),
+                (self.t("dark"), "dark"),
+            ],
+            self.settings["theme"],
+            self.on_theme_changed,
+            horizontal=True,
+        )
+
+        # ── Dil ──
+        self._add_section(main_box, self.t("language"),
+            [("Türkçe", "tr"), ("English", "en")],
+            self.settings["language"],
+            self.on_language_changed,
+            horizontal=True,
+        )
+
+        # ── Başlatma hızı ──
+        self._add_section(main_box, self.t("launch_speed"),
+            [
+                (self.t("normal"),  "normal"),
+                (self.t("power"),   "power"),
+                (self.t("ultra"),   "ultra"),
+            ],
+            self.settings["launch_speed"],
+            self.on_speed_changed,
+            horizontal=True,
+        )
+
+        # ── Kapat düğmesi ──
+        close_btn = Gtk.Button(label=self.t("close"))
+        close_btn.get_style_context().add_class("primary-btn")
+        close_btn.set_halign(Gtk.Align.END)
+        close_btn.connect("clicked", lambda *_: dlg.destroy())
+        main_box.pack_start(close_btn, False, False, 0)
+
+        dlg.show_all()
+
+    def _add_section(self, parent, title, options, current, callback, horizontal=True):
+        """Genel ayar bölümü oluşturucu"""
+        section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        lbl = Gtk.Label(label=title.upper())
+        lbl.get_style_context().add_class("section-title")
+        lbl.set_halign(Gtk.Align.START)
+        section.pack_start(lbl, False, False, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card.get_style_context().add_class("settings-card")
+
+        orient = Gtk.Orientation.HORIZONTAL if horizontal else Gtk.Orientation.VERTICAL
+        btn_box = Gtk.Box(orientation=orient, spacing=0)
+        btn_box.set_margin_start(4)
+        btn_box.set_margin_end(4)
+        btn_box.set_margin_top(4)
+        btn_box.set_margin_bottom(4)
+
+        first_btn = None
+        for i, (label_text, value) in enumerate(options):
+            if i == 0:
+                radio = Gtk.RadioButton.new_with_label_from_widget(None, label_text)
+                first_btn = radio
+            else:
+                radio = Gtk.RadioButton.new_with_label_from_widget(first_btn, label_text)
+
+            if value == current:
+                radio.set_active(True)
+
+            radio.connect("toggled", callback, value)
+            btn_box.pack_start(radio, False, False, 0)
+
+            # Ayırıcı (son öğe hariç)
+            if i < len(options) - 1 and not horizontal:
+                sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                card.pack_start(sep, False, False, 0)
+
+        card.pack_start(btn_box, False, False, 0)
+        section.pack_start(card, False, False, 0)
+        parent.pack_start(section, False, False, 0)
+
+    # ── Ayar değiştirme callback'leri ────────────────────────────────────────
+
+    def on_theme_changed(self, btn, value):
+        if btn.get_active():
+            self.settings["theme"] = value
+            self.save_settings()
+            self.apply_css()
+
+    def on_language_changed(self, btn, value):
+        if btn.get_active():
+            self.settings["language"] = value
+            self.save_settings()
+            GLib.timeout_add(80, self._rebuild_ui)
+
+    def on_speed_changed(self, btn, value):
+        if btn.get_active():
+            self.settings["launch_speed"] = value
+            self.save_settings()
+
+    def _rebuild_ui(self):
+        """Dil değişikliğinde UI'ı sıfırla"""
+        for child in self.get_children():
+            self.remove(child)
+        self.build_ui()
+        self.apply_css()
+        self.render_apps(self.apps)
+        self.show_all()
+        # Header güncellemesi
+        self.header.set_title(self.t("title"))
+        self.header.set_subtitle(f"{len(self.apps)} {self.t('apps_count')}")
+        return False  # GLib.timeout_add bir kez çalışsın
+
+    # ── Arama ────────────────────────────────────────────────────────────────
 
     def on_search(self, entry):
-        text = entry.get_text().lower()
+        text = entry.get_text().strip().lower()
         if not text:
             self.render_apps(self.apps)
         else:
-            self.render_apps([a for a in self.apps if text in a[0].lower()])
+            filtered = [a for a in self.apps if text in a[0].lower()]
+            self.render_apps(filtered)
+
+    # ── Uygulama başlatma ─────────────────────────────────────────────────────
+
+    def launch(self, cmd: str):
+        speed = self.settings["launch_speed"]
+        try:
+            if speed == "normal":
+                subprocess.Popen(
+                    cmd, shell=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            elif speed == "power":
+                subprocess.Popen(
+                    f"nohup {cmd} >/dev/null 2>&1 &", shell=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            else:  # ultra
+                has_systemd = subprocess.run(
+                    ["which", "systemd-run"], capture_output=True
+                ).returncode == 0
+
+                if has_systemd:
+                    subprocess.Popen(
+                        f"systemd-run --user --scope --nice=-5 {cmd}",
+                        shell=True,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    subprocess.Popen(
+                        f"nohup {cmd} >/dev/null 2>&1 &", shell=True,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+            self.destroy()
+        except Exception as e:
+            print(f"Launch error: {e}")
 
 
 if __name__ == "__main__":
